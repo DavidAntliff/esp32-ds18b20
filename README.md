@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This is a ESP32-compatible C library for the Maxim Integrated DS18B20 Programmable Resolution 1-Wire Digital Thermometer device.
+This is a ESP32-compatible C component for the Maxim Integrated DS18B20 Programmable Resolution 1-Wire Digital Thermometer device.
 
 It supports multiple devices on the same 1-Wire bus.
 
@@ -14,7 +14,7 @@ Requires [esp32-owb](https://github.com/DavidAntliff/esp32-owb).
 
 ## Example
 
-See [esp32-ds18b20-example](https://github.com/DavidAntliff/esp32-ds18b20-example) for a working multi-device example.
+See [esp32-ds18b20-example](https://github.com/DavidAntliff/esp32-ds18b20-example) for an example that supports single and multiple devices on a single bus.
 
 ## Features
 
