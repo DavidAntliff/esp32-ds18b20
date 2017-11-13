@@ -412,7 +412,6 @@ float ds18b20_read_temp(const DS18B20_Info * ds18b20_info)
         if (_address_device(ds18b20_info))
         {
             // read measurement
-            _address_device(ds18b20_info);
             owb_write_byte(bus, DS18B20_FUNCTION_SCRATCHPAD_READ);
 
             uint8_t temp_LSB = 0;
