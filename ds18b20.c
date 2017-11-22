@@ -115,7 +115,7 @@ static bool _address_device(const DS18B20_Info * ds18b20_info)
     bool present = false;
     if (_is_init(ds18b20_info))
     {
-        present = owb_reset(ds18b20_info->bus);
+        owb_reset(ds18b20_info->bus, &present);
         if (present)
         {
             if (ds18b20_info->solo)
@@ -388,7 +388,8 @@ bool ds18b20_convert(const DS18B20_Info * ds18b20_info)
 
 void ds18b20_convert_all(const OneWireBus * bus)
 {
-    owb_reset(bus);
+    bool is_present = false;
+    owb_reset(bus, &is_present);
     owb_write_byte(bus, OWB_ROM_SKIP);
     owb_write_byte(bus, DS18B20_FUNCTION_TEMP_CONVERT);
 }
@@ -420,9 +421,10 @@ float ds18b20_read_temp(const DS18B20_Info * ds18b20_info)
             if (!ds18b20_info->use_crc)
             {
                 // Without CRC:
-                temp_LSB = owb_read_byte(bus);
-                temp_MSB = owb_read_byte(bus);
-                owb_reset(bus);  // terminate early
+                owb_read_byte(bus, &temp_LSB);
+                owb_read_byte(bus, &temp_MSB);
+                bool is_present = false;
+                owb_reset(bus, &is_present);  // terminate early
             }
             else
             {
