@@ -40,8 +40,17 @@
 extern "C" {
 #endif
 
-// Return this for readings that suffer CRC errors (msb=0x80, lsb=0x00)
-#define DS18B20_INVALID_READING (-2048.0f)
+/**
+ * @brief Success and error codes.
+ */
+typedef enum
+{
+    DS18B20_ERROR_UNKNOWN = -1,
+    DS18B20_OK = 0,
+    DS18B20_ERROR_DEVICE,  ///< A device error occurred
+    DS18B20_ERROR_CRC,     ///< A CRC error occurred
+    DS18B20_ERROR_OWB,     ///< A One Wire Bus error occurred
+} DS18B20_ERROR;
 
 /**
  * @brief Symbols for the supported temperature resolution of the device.
@@ -166,16 +175,18 @@ float ds18b20_wait_for_conversion(const DS18B20_Info * ds18b20_info);
  * This is typically called after ds18b20_start_mass_conversion(), provided enough time
  * has elapsed to ensure that all devices have completed their conversions.
  * @param[in] ds18b20_info Pointer to device info instance. Must be initialised first.
- * @return The measurement value returned by the device, in degrees Celsius.
+ * @param[out] value Pointer to the measurement value returned by the device, in degrees Celsius.
+ * @return DS18B20_OK if read is successful, otherwise error.
  */
-float ds18b20_read_temp(const DS18B20_Info * ds18b20_info);
+DS18B20_ERROR ds18b20_read_temp(const DS18B20_Info * ds18b20_info, float * value);
 
 /**
  * @brief Convert, wait and read current temperature from device.
  * @param[in] ds18b20_info Pointer to device info instance. Must be initialised first.
- * @return The measurement value returned by the device, in degrees Celsius.
+ * @param[out] value Pointer to the measurement value returned by the device, in degrees Celsius.
+ * @return DS18B20_OK if read is successful, otherwise error.
  */
-float ds18b20_convert_and_read_temp(const DS18B20_Info * ds18b20_info);
+DS18B20_ERROR ds18b20_convert_and_read_temp(const DS18B20_Info * ds18b20_info, float * value);
 
 #ifdef __cplusplus
 }

@@ -403,69 +403,87 @@ float ds18b20_wait_for_conversion(const DS18B20_Info * ds18b20_info)
     return elapsed_time;
 }
 
-float ds18b20_read_temp(const DS18B20_Info * ds18b20_info)
+DS18B20_ERROR ds18b20_read_temp(const DS18B20_Info * ds18b20_info, float * value)
 {
-    float temp = 0.0f;
+    DS18B20_ERROR err = DS18B20_ERROR_UNKNOWN;
     if (_is_init(ds18b20_info))
     {
         const OneWireBus * bus = ds18b20_info->bus;
         if (_address_device(ds18b20_info))
         {
             // read measurement
-            owb_write_byte(bus, DS18B20_FUNCTION_SCRATCHPAD_READ);
-
-            uint8_t temp_LSB = 0;
-            uint8_t temp_MSB = 0;
-            if (!ds18b20_info->use_crc)
+            if (owb_write_byte(bus, DS18B20_FUNCTION_SCRATCHPAD_READ) == OWB_STATUS_OK)
             {
-                // Without CRC:
-                owb_read_byte(bus, &temp_LSB);
-                owb_read_byte(bus, &temp_MSB);
-                bool is_present = false;
-                owb_reset(bus, &is_present);  // terminate early
+                err = DS18B20_OK;
+
+                uint8_t temp_LSB = 0;
+                uint8_t temp_MSB = 0;
+                if (!ds18b20_info->use_crc)
+                {
+                    // Without CRC:
+                    owb_read_byte(bus, &temp_LSB);
+                    owb_read_byte(bus, &temp_MSB);
+                    bool is_present = false;
+                    owb_reset(bus, &is_present);  // terminate early
+                }
+                else
+                {
+                    // with CRC:
+                    uint8_t buffer[9] = {0};
+                    owb_read_bytes(bus, buffer, 9);
+
+                    temp_LSB = buffer[0];
+                    temp_MSB = buffer[1];
+
+                    if (owb_crc8_bytes(0, buffer, 9) != 0)
+                    {
+                        ESP_LOGE(TAG, "CRC failed");
+                        temp_LSB = 0x00;
+                        temp_MSB = 0x80;
+                        err = DS18B20_ERROR_CRC;
+                    }
+                }
+
+                if (err == DS18B20_OK)
+                {
+                    float temp = _decode_temp(temp_LSB, temp_MSB, ds18b20_info->resolution);
+                    ESP_LOGD(TAG, "temp_LSB 0x%02x, temp_MSB 0x%02x, temp %f", temp_LSB, temp_MSB, temp);
+
+                    if (value)
+                    {
+                        *value = temp;
+                    }
+                }
             }
             else
             {
-                // with CRC:
-                uint8_t buffer[9] = {0};
-                owb_read_bytes(bus, buffer, 9);
-
-                temp_LSB = buffer[0];
-                temp_MSB = buffer[1];
-
-                if (owb_crc8_bytes(0, buffer, 9) != 0)
-                {
-                    ESP_LOGE(TAG, "CRC failed");
-                    temp_LSB = 0x00;
-                    temp_MSB = 0x80;
-                }
+                ESP_LOGE(TAG, "owb_write_byte failed");
+                err = DS18B20_ERROR_OWB;
             }
-
-            ESP_LOGD(TAG, "temp_LSB 0x%02x, temp_MSB 0x%02x", temp_LSB, temp_MSB);
-            temp = _decode_temp(temp_LSB, temp_MSB, ds18b20_info->resolution);
         }
         else
         {
             ESP_LOGE(TAG, "ds18b20 device not responding");
+            err = DS18B20_ERROR_DEVICE;
         }
     }
-    return temp;
+    return err;
 }
 
-float ds18b20_convert_and_read_temp(const DS18B20_Info * ds18b20_info)
+DS18B20_ERROR ds18b20_convert_and_read_temp(const DS18B20_Info * ds18b20_info, float * value)
 {
-    float temp = 0.0f;
+    DS18B20_ERROR err = DS18B20_ERROR_UNKNOWN;
     if (_is_init(ds18b20_info))
     {
         if (ds18b20_convert(ds18b20_info))
         {
             // wait at least maximum conversion time
             _wait_for_conversion(ds18b20_info->resolution);
-
-            temp = ds18b20_read_temp(ds18b20_info);
+            float temp = 0.0f;
+            err = ds18b20_read_temp(ds18b20_info, &temp);
         }
     }
-    return temp;
+    return err;
 }
 
 
