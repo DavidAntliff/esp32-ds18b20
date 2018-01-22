@@ -30,8 +30,9 @@ script:
 # Deploy using Travis-CI/GitHub Pages integration support
 deploy:
   provider: pages
+  edge: true
   skip-cleanup: true
-  local-dir: html
+  local-dir: doc/html
   github-token: $GITHUB_TOKEN
   on:
     branch: master
