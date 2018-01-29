@@ -50,6 +50,7 @@ typedef enum
     DS18B20_ERROR_DEVICE,  ///< A device error occurred
     DS18B20_ERROR_CRC,     ///< A CRC error occurred
     DS18B20_ERROR_OWB,     ///< A One Wire Bus error occurred
+    DS18B20_ERROR_NULL,    ///< A parameter or value is NULL
 } DS18B20_ERROR;
 
 /**

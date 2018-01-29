@@ -479,8 +479,15 @@ DS18B20_ERROR ds18b20_convert_and_read_temp(const DS18B20_Info * ds18b20_info, f
         {
             // wait at least maximum conversion time
             _wait_for_conversion(ds18b20_info->resolution);
-            float temp = 0.0f;
-            err = ds18b20_read_temp(ds18b20_info, &temp);
+            if (value)
+            {
+                *value = 0.0f;
+                err = ds18b20_read_temp(ds18b20_info, value);
+            }
+            else
+            {
+                err = DS18B20_ERROR_NULL;
+            }
         }
     }
     return err;
