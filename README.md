@@ -6,7 +6,7 @@ This is a ESP32-compatible C component for the Maxim Integrated DS18B20 Programm
 
 It supports multiple devices on the same 1-Wire bus.
 
-It is written and tested for the [ESP-IDF](https://github.com/espressif/esp-idf) environment, using the xtensa-esp32-elf toolchain (gcc version 5.2.0).
+It is written and tested for v2.1 and v3.0 of the [ESP-IDF](https://github.com/espressif/esp-idf) environment, using the xtensa-esp32-elf toolchain (gcc version 5.2.0).
 
 ## Dependencies
 
