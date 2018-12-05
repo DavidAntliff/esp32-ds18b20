@@ -285,6 +285,7 @@ void ds18b20_init_solo(DS18B20_Info * ds18b20_info, const OneWireBus * bus)
     {
         _init(ds18b20_info, bus);
         ds18b20_info->solo = true;
+        // ROM code not required
 
         // read current resolution from device as it may not be power-on or factory default
         ds18b20_info->resolution = ds18b20_read_resolution(ds18b20_info);
