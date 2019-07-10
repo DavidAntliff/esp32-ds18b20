@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2017 David Antliff
+ * Copyright (c) 2017-2019 David Antliff
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -170,7 +170,7 @@ static float _decode_temp(uint8_t lsb, uint8_t msb, DS18B20_RESOLUTION resolutio
     if (_check_resolution(resolution))
     {
         // masks to remove undefined bits from result
-        static const uint8_t lsb_mask[4] = { ~0x03, ~0x02, ~0x01, ~0x00 };
+        static const uint8_t lsb_mask[4] = { ~0x07, ~0x03, ~0x01, ~0x00 };
         uint8_t lsb_masked = lsb_mask[resolution - DS18B20_RESOLUTION_9_BIT] & lsb;
         int16_t raw = (msb << 8) | lsb_masked;
         result = raw / 16.0f;
