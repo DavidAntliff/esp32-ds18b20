@@ -67,7 +67,7 @@ typedef struct
     uint8_t configuration;
     uint8_t reserved[3];
     uint8_t crc;
-} Scratchpad;
+} __attribute__((packed)) Scratchpad;
 /// @endcond ignore
 
 static void _init(DS18B20_Info * ds18b20_info, const OneWireBus * bus)
@@ -187,18 +187,49 @@ static size_t _min(size_t x, size_t y)
     return x > y ? y : x;
 }
 
-static Scratchpad _read_scratchpad(const DS18B20_Info * ds18b20_info, size_t count)
+static DS18B20_ERROR _read_scratchpad(const DS18B20_Info * ds18b20_info, Scratchpad * scratchpad, size_t count)
 {
+	DS18B20_ERROR err = DS18B20_ERROR_UNKNOWN;
+	if (!scratchpad) {
+		return DS18B20_ERROR_NULL;
+	}
+
     count = _min(sizeof(Scratchpad), count);   // avoid overflow
-    Scratchpad scratchpad = {0};
     ESP_LOGD(TAG, "scratchpad read %d bytes: ", count);
     if (_address_device(ds18b20_info))
     {
-        owb_write_byte(ds18b20_info->bus, DS18B20_FUNCTION_SCRATCHPAD_READ);
-        owb_read_bytes(ds18b20_info->bus, (uint8_t *)&scratchpad, count);
-        //esp_log_buffer_hex(TAG, &scratchpad, count);
+        // read measurement
+        if (owb_write_byte(bus, DS18B20_FUNCTION_SCRATCHPAD_READ) == OWB_STATUS_OK)
+        {
+                err = DS18B20_OK;
+
+				owb_read_bytes(ds18b20_info->bus, (uint8_t *)&scratchpad, count);
+                if (!ds18b20_info->use_crc || count < sizeof(*scratchpad))
+                {
+                    // Without CRC:
+                    bool is_present = false;
+                    owb_reset(ds18b20_info->bus, &is_present);  // terminate early
+                }
+                else
+                {
+                    // with CRC:
+                    if (owb_crc8_bytes(0, buffer, sizeof(*scratchpad)) != 0)
+                    {
+                        ESP_LOGE(TAG, "CRC failed");
+                        err = DS18B20_ERROR_CRC;
+                    }
+                }
+
+				esp_log_buffer_hex(TAG, &scratchpad, count);
+            }
+            else
+            {
+                ESP_LOGE(TAG, "owb_write_byte failed");
+                err = DS18B20_ERROR_OWB;
+            }
+	    }
     }
-    return scratchpad;
+    return err;
 }
 
 static bool _write_scratchpad(const DS18B20_Info * ds18b20_info, const Scratchpad * scratchpad, bool verify)
