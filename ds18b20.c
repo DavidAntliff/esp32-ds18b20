@@ -144,22 +144,38 @@ static bool _check_resolution(DS18B20_RESOLUTION resolution)
     return (resolution >= DS18B20_RESOLUTION_9_BIT) && (resolution <= DS18B20_RESOLUTION_12_BIT);
 }
 
-static float _wait_for_conversion(DS18B20_RESOLUTION resolution)
+static float _wait_for_conversion(const DS18B20_Info * ds18b20_info)
 {
     float elapsed_time = 0.0f;
-    if (_check_resolution(resolution))
+    if (_check_resolution(ds18b20_info->resolution))
     {
-        int divisor = 1 << (DS18B20_RESOLUTION_12_BIT - resolution);
-        ESP_LOGD(TAG, "divisor %d", divisor);
-        float max_conversion_time = (float)T_CONV / (float)divisor;
-        int ticks = ceil(max_conversion_time / portTICK_PERIOD_MS);
-        ESP_LOGD(TAG, "wait for conversion: %.3f ms, %d ticks", max_conversion_time, ticks);
+        int divisor = 1 << (DS18B20_RESOLUTION_12_BIT - ds18b20_info->resolution);
 
-        // wait at least this maximum conversion time
-        vTaskDelay(ticks);
+		// allow for 10% overtime
+        float max_conversion_time = (float)T_CONV / (float)divisor * 1.1;
+        int max_conversion_ticks = ceil(max_conversion_time / portTICK_PERIOD_MS);
+        ESP_LOGD(TAG, "wait for conversion: max %.0f ms, %d ticks", max_conversion_time, max_conversion_ticks);
 
-        // TODO: measure elapsed time more accurately
-        elapsed_time = ticks * portTICK_PERIOD_MS;
+		// wait for conversion to complete
+		TickType_t start_ticks = xTaskGetTickCount();
+		TickType_t duration_ticks = 0;
+		uint8_t status = 0;
+		do
+		{
+			vTaskDelay(1);
+			owb_read_bit(ds18b20_info->bus, &status);
+			duration_ticks = xTaskGetTickCount() - start_ticks;
+		} while (status == 0 && duration_ticks < max_conversion_ticks);
+
+		elapsed_time = duration_ticks * portTICK_PERIOD_MS;
+		if (duration_ticks >= max_conversion_ticks)
+		{
+			ESP_LOGW(TAG, "conversion timed out");
+		}
+		else
+		{
+			ESP_LOGD(TAG, "conversion took at most %.0f ms", elapsed_time);
+		}
     }
     return elapsed_time;
 }
@@ -399,7 +415,7 @@ float ds18b20_wait_for_conversion(const DS18B20_Info * ds18b20_info)
     float elapsed_time = 0.0f;
     if (_is_init(ds18b20_info))
     {
-        elapsed_time = _wait_for_conversion(ds18b20_info->resolution);
+        elapsed_time = _wait_for_conversion(ds18b20_info);
     }
     return elapsed_time;
 }
@@ -448,7 +464,7 @@ DS18B20_ERROR ds18b20_read_temp(const DS18B20_Info * ds18b20_info, float * value
                 if (err == DS18B20_OK)
                 {
                     float temp = _decode_temp(temp_LSB, temp_MSB, ds18b20_info->resolution);
-                    ESP_LOGD(TAG, "temp_LSB 0x%02x, temp_MSB 0x%02x, temp %f", temp_LSB, temp_MSB, temp);
+                    ESP_LOGD(TAG, "temp_LSB 0x%02x, temp_MSB 0x%02x, temp %.3f", temp_LSB, temp_MSB, temp);
 
                     if (value)
                     {
@@ -479,7 +495,7 @@ DS18B20_ERROR ds18b20_convert_and_read_temp(const DS18B20_Info * ds18b20_info, f
         if (ds18b20_convert(ds18b20_info))
         {
             // wait at least maximum conversion time
-            _wait_for_conversion(ds18b20_info->resolution);
+            _wait_for_conversion(ds18b20_info);
             if (value)
             {
                 *value = 0.0f;
