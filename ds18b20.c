@@ -189,45 +189,64 @@ static size_t _min(size_t x, size_t y)
 
 static DS18B20_ERROR _read_scratchpad(const DS18B20_Info * ds18b20_info, Scratchpad * scratchpad, size_t count)
 {
-	DS18B20_ERROR err = DS18B20_ERROR_UNKNOWN;
-	if (!scratchpad) {
-		return DS18B20_ERROR_NULL;
-	}
+    // If CRC is enabled, regardless of count, read the entire scratchpad and verify the CRC,
+    // otherwise read up to the scratchpad size, or count, whichever is smaller.
 
-    count = _min(sizeof(Scratchpad), count);   // avoid overflow
-    ESP_LOGD(TAG, "scratchpad read %d bytes: ", count);
+    if (!scratchpad) {
+        return DS18B20_ERROR_NULL;
+    }
+
+    DS18B20_ERROR err = DS18B20_ERROR_UNKNOWN;
+
+    if (ds18b20_info->use_crc)
+    {
+        count = sizeof(Scratchpad);
+    }
+    count = _min(sizeof(Scratchpad), count);   // avoid reading past end of scratchpad
+
+    ESP_LOGD(TAG, "scratchpad read: CRC %d, count %d", ds18b20_info->use_crc, count);
     if (_address_device(ds18b20_info))
     {
-        // read measurement
-        if (owb_write_byte(bus, DS18B20_FUNCTION_SCRATCHPAD_READ) == OWB_STATUS_OK)
+        // read scratchpad
+        if (owb_write_byte(ds18b20_info->bus, DS18B20_FUNCTION_SCRATCHPAD_READ) == OWB_STATUS_OK)
         {
-                err = DS18B20_OK;
+            if (owb_read_bytes(ds18b20_info->bus, (uint8_t *)scratchpad, count) == OWB_STATUS_OK)
+            {
+                ESP_LOG_BUFFER_HEX_LEVEL(TAG, scratchpad, count, ESP_LOG_DEBUG);
 
-				owb_read_bytes(ds18b20_info->bus, (uint8_t *)&scratchpad, count);
-                if (!ds18b20_info->use_crc || count < sizeof(*scratchpad))
+                err = DS18B20_OK;
+                if (!ds18b20_info->use_crc)
                 {
-                    // Without CRC:
+                    // Without CRC, or partial read:
+                    ESP_LOGD(TAG, "No CRC check");
                     bool is_present = false;
                     owb_reset(ds18b20_info->bus, &is_present);  // terminate early
                 }
                 else
                 {
-                    // with CRC:
-                    if (owb_crc8_bytes(0, buffer, sizeof(*scratchpad)) != 0)
+                    // With CRC:
+                    if (owb_crc8_bytes(0, (uint8_t *)scratchpad, sizeof(*scratchpad)) != 0)
                     {
                         ESP_LOGE(TAG, "CRC failed");
                         err = DS18B20_ERROR_CRC;
                     }
+                    else
+                    {
+                        ESP_LOGD(TAG, "CRC ok");
+                    }
                 }
-
-				esp_log_buffer_hex(TAG, &scratchpad, count);
             }
             else
             {
-                ESP_LOGE(TAG, "owb_write_byte failed");
+                ESP_LOGE(TAG, "owb_read_bytes failed");
                 err = DS18B20_ERROR_OWB;
             }
-	    }
+        }
+        else
+        {
+            ESP_LOGE(TAG, "owb_write_byte failed");
+            err = DS18B20_ERROR_OWB;
+        }
     }
     return err;
 }
@@ -241,24 +260,32 @@ static bool _write_scratchpad(const DS18B20_Info * ds18b20_info, const Scratchpa
     {
         if (_address_device(ds18b20_info))
         {
+            ESP_LOGD(TAG, "scratchpad write 3 bytes:");
+            ESP_LOG_BUFFER_HEX_LEVEL(TAG, &scratchpad->trigger_high, 3, ESP_LOG_DEBUG);
             owb_write_byte(ds18b20_info->bus, DS18B20_FUNCTION_SCRATCHPAD_WRITE);
             owb_write_bytes(ds18b20_info->bus, (uint8_t *)&scratchpad->trigger_high, 3);
-            ESP_LOGD(TAG, "scratchpad write 3 bytes:");
-            //esp_log_buffer_hex(TAG, &scratchpad->trigger_high, 3);
             result = true;
 
             if (verify)
             {
-                Scratchpad read = _read_scratchpad(ds18b20_info, offsetof(Scratchpad, configuration) + 1);
-                if (memcmp(&scratchpad->trigger_high, &read.trigger_high, 3) != 0)
+                Scratchpad read = {0};
+                if (_read_scratchpad(ds18b20_info, &read, offsetof(Scratchpad, configuration) + 1) == DS18B20_OK)
                 {
-                    ESP_LOGE(TAG, "scratchpad verify failed: "
-                            "wrote {0x%02x, 0x%02x, 0x%02x}, "
-                            "read {0x%02x, 0x%02x, 0x%02x}",
-                            scratchpad->trigger_high, scratchpad->trigger_low, scratchpad->configuration,
-                            read.trigger_high, read.trigger_low, read.configuration);
-                    result = false;
+                    if (memcmp(&scratchpad->trigger_high, &read.trigger_high, 3) != 0)
+                    {
+                        ESP_LOGE(TAG, "scratchpad verify failed: "
+                                 "wrote {0x%02x, 0x%02x, 0x%02x}, "
+                                 "read {0x%02x, 0x%02x, 0x%02x}",
+                                 scratchpad->trigger_high, scratchpad->trigger_low, scratchpad->configuration,
+                                 read.trigger_high, read.trigger_low, read.configuration);
+                        result = false;
+                    }
                 }
+                else
+                {
+					ESP_LOGE(TAG, "read scratchpad failed");
+					result = false;
+				}
             }
         }
     }
@@ -344,7 +371,8 @@ bool ds18b20_set_resolution(DS18B20_Info * ds18b20_info, DS18B20_RESOLUTION reso
         if (_check_resolution(ds18b20_info->resolution))
         {
             // read scratchpad up to and including configuration register
-            Scratchpad scratchpad = _read_scratchpad(ds18b20_info,
+            Scratchpad scratchpad = {0};
+            _read_scratchpad(ds18b20_info, &scratchpad,
                     offsetof(Scratchpad, configuration) - offsetof(Scratchpad, temperature) + 1);
 
             // modify configuration register to set resolution
@@ -380,7 +408,8 @@ DS18B20_RESOLUTION ds18b20_read_resolution(DS18B20_Info * ds18b20_info)
     if (_is_init(ds18b20_info))
     {
         // read scratchpad up to and including configuration register
-        Scratchpad scratchpad = _read_scratchpad(ds18b20_info,
+        Scratchpad scratchpad = {0};
+        _read_scratchpad(ds18b20_info, &scratchpad,
                 offsetof(Scratchpad, configuration) - offsetof(Scratchpad, temperature) + 1);
 
         resolution = ((scratchpad.configuration >> 5) & 0x03) + DS18B20_RESOLUTION_9_BIT;
@@ -440,64 +469,22 @@ DS18B20_ERROR ds18b20_read_temp(const DS18B20_Info * ds18b20_info, float * value
     DS18B20_ERROR err = DS18B20_ERROR_UNKNOWN;
     if (_is_init(ds18b20_info))
     {
-        const OneWireBus * bus = ds18b20_info->bus;
-        if (_address_device(ds18b20_info))
+        uint8_t temp_LSB = 0x00;
+        uint8_t temp_MSB = 0x80;
+        Scratchpad scratchpad = {0};
+        if ((err = _read_scratchpad(ds18b20_info, &scratchpad, 2)) == DS18B20_OK)
         {
-            // read measurement
-            if (owb_write_byte(bus, DS18B20_FUNCTION_SCRATCHPAD_READ) == OWB_STATUS_OK)
-            {
-                err = DS18B20_OK;
+			temp_LSB = scratchpad.temperature[0];
+			temp_MSB = scratchpad.temperature[1];
+		}
 
-                uint8_t temp_LSB = 0;
-                uint8_t temp_MSB = 0;
-                if (!ds18b20_info->use_crc)
-                {
-                    // Without CRC:
-                    owb_read_byte(bus, &temp_LSB);
-                    owb_read_byte(bus, &temp_MSB);
-                    bool is_present = false;
-                    owb_reset(bus, &is_present);  // terminate early
-                }
-                else
-                {
-                    // with CRC:
-                    uint8_t buffer[9] = {0};
-                    owb_read_bytes(bus, buffer, 9);
+		float temp = _decode_temp(temp_LSB, temp_MSB, ds18b20_info->resolution);
+		ESP_LOGD(TAG, "temp_LSB 0x%02x, temp_MSB 0x%02x, temp %f", temp_LSB, temp_MSB, temp);
 
-                    temp_LSB = buffer[0];
-                    temp_MSB = buffer[1];
-
-                    if (owb_crc8_bytes(0, buffer, 9) != 0)
-                    {
-                        ESP_LOGE(TAG, "CRC failed");
-                        temp_LSB = 0x00;
-                        temp_MSB = 0x80;
-                        err = DS18B20_ERROR_CRC;
-                    }
-                }
-
-                if (err == DS18B20_OK)
-                {
-                    float temp = _decode_temp(temp_LSB, temp_MSB, ds18b20_info->resolution);
-                    ESP_LOGD(TAG, "temp_LSB 0x%02x, temp_MSB 0x%02x, temp %f", temp_LSB, temp_MSB, temp);
-
-                    if (value)
-                    {
-                        *value = temp;
-                    }
-                }
-            }
-            else
-            {
-                ESP_LOGE(TAG, "owb_write_byte failed");
-                err = DS18B20_ERROR_OWB;
-            }
-        }
-        else
+		if (value)
         {
-            ESP_LOGE(TAG, "ds18b20 device not responding");
-            err = DS18B20_ERROR_DEVICE;
-        }
+			*value = temp;
+		}
     }
     return err;
 }
