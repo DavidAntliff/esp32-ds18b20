@@ -144,7 +144,25 @@ static bool _check_resolution(DS18B20_RESOLUTION resolution)
     return (resolution >= DS18B20_RESOLUTION_9_BIT) && (resolution <= DS18B20_RESOLUTION_12_BIT);
 }
 
-static float _wait_for_conversion(const DS18B20_Info * ds18b20_info)
+static float _wait_for_duration(DS18B20_RESOLUTION resolution)
+{
+    int64_t start_time = esp_timer_get_time();
+    if (_check_resolution(resolution))
+    {
+        int divisor = 1 << (DS18B20_RESOLUTION_12_BIT - resolution);
+        ESP_LOGD(TAG, "divisor %d", divisor);
+        float max_conversion_time = (float)T_CONV / (float)divisor;
+        int ticks = ceil(max_conversion_time / portTICK_PERIOD_MS);
+        ESP_LOGD(TAG, "wait for conversion: %.3f ms, %d ticks", max_conversion_time, ticks);
+
+        // wait at least this maximum conversion time
+        vTaskDelay(ticks);
+    }
+    int64_t end_time = esp_timer_get_time();
+    return (float)(end_time - start_time) / 1000000.0f;
+}
+
+static float _wait_for_device_signal(const DS18B20_Info * ds18b20_info)
 {
     float elapsed_time = 0.0f;
     if (_check_resolution(ds18b20_info->resolution))
@@ -156,7 +174,7 @@ static float _wait_for_conversion(const DS18B20_Info * ds18b20_info)
         int max_conversion_ticks = ceil(max_conversion_time / portTICK_PERIOD_MS);
         ESP_LOGD(TAG, "wait for conversion: max %.0f ms, %d ticks", max_conversion_time, max_conversion_ticks);
 
-        // wait for conversion to complete
+        // wait for conversion to complete - all devices will pull bus low once complete
         TickType_t start_ticks = xTaskGetTickCount();
         TickType_t duration_ticks = 0;
         uint8_t status = 0;
@@ -464,10 +482,18 @@ bool ds18b20_convert(const DS18B20_Info * ds18b20_info)
 
 void ds18b20_convert_all(const OneWireBus * bus)
 {
-    bool is_present = false;
-    owb_reset(bus, &is_present);
-    owb_write_byte(bus, OWB_ROM_SKIP);
-    owb_write_byte(bus, DS18B20_FUNCTION_TEMP_CONVERT);
+    if (bus)
+    {
+        bool is_present = false;
+        owb_reset(bus, &is_present);
+        owb_write_byte(bus, OWB_ROM_SKIP);
+        owb_write_byte(bus, DS18B20_FUNCTION_TEMP_CONVERT);
+        owb_set_strong_pullup(bus, true);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "bus is NULL");
+    }
 }
 
 float ds18b20_wait_for_conversion(const DS18B20_Info * ds18b20_info)
@@ -475,7 +501,17 @@ float ds18b20_wait_for_conversion(const DS18B20_Info * ds18b20_info)
     float elapsed_time = 0.0f;
     if (_is_init(ds18b20_info))
     {
-        elapsed_time = _wait_for_conversion(ds18b20_info);
+        if (ds18b20_info->bus->use_parasitic_power)
+        {
+            // in parasitic mode, devices cannot signal when they are complete,
+            // so use the datasheet values to wait for a duration.
+            elapsed_time = _wait_for_duration(ds18b20_info->resolution);
+        }
+        else
+        {
+            // wait for the device(s) to indicate the conversion is complete
+            elapsed_time = _wait_for_device_signal(ds18b20_info);
+        }
     }
     return elapsed_time;
 }
@@ -513,7 +549,8 @@ DS18B20_ERROR ds18b20_convert_and_read_temp(const DS18B20_Info * ds18b20_info, f
         if (ds18b20_convert(ds18b20_info))
         {
             // wait at least maximum conversion time
-            _wait_for_conversion(ds18b20_info);
+            ds18b20_wait_for_conversion(ds18b20_info);
+
             if (value)
             {
                 *value = 0.0f;
@@ -528,4 +565,39 @@ DS18B20_ERROR ds18b20_convert_and_read_temp(const DS18B20_Info * ds18b20_info, f
     return err;
 }
 
-
+DS18B20_ERROR ds18b20_check_for_parasite_power(const OneWireBus * bus, bool * present)
+{
+    DS18B20_ERROR err = DS18B20_ERROR_UNKNOWN;
+    ESP_LOGD(TAG, "ds18b20_check_for_parasite_power");
+    if (bus) {
+        bool reset_present;
+        if ((err = owb_reset(bus, &reset_present)) == DS18B20_OK)
+        {
+            ESP_LOGD(TAG, "owb_reset OK");
+            if ((err = owb_write_byte(bus, OWB_ROM_SKIP)) == DS18B20_OK)
+            {
+                ESP_LOGD(TAG, "owb_write_byte(ROM_SKIP) OK");
+                if ((err = owb_write_byte(bus, DS18B20_FUNCTION_POWER_SUPPLY_READ)) == DS18B20_OK)
+                {
+                    // PArasitic-powered devices will pull the bus low during read time slot
+                    ESP_LOGD(TAG, "owb_write_byte(POWER_SUPPLY_READ) OK");
+                    uint8_t value = 0;
+                    if ((err = owb_read_bit(bus, &value)) == DS18B20_OK)
+                    {
+                        ESP_LOGD(TAG, "owb_read_bit OK: 0x%02x", value);
+                        if (present)
+                        {
+                            *present = !(bool)(value & 0x01u);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        ESP_LOGE(TAG, "bus is NULL");
+        err = DS18B20_ERROR_NULL;
+    }
+    return err;
+}

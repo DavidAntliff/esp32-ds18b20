@@ -189,6 +189,15 @@ DS18B20_ERROR ds18b20_read_temp(const DS18B20_Info * ds18b20_info, float * value
  */
 DS18B20_ERROR ds18b20_convert_and_read_temp(const DS18B20_Info * ds18b20_info, float * value);
 
+/**
+ * @brief Check OneWire bus for presence of parasitic-powered devices.
+ *
+ * @param[in] bus Pointer to initialised bus instance.
+ * @param[out] present Result value, true if a parasitic-powered device was detected.
+ * @return DS18B20_OK if check is successful, otherwise error.
+ */
+DS18B20_ERROR ds18b20_check_for_parasite_power(const OneWireBus * bus, bool * present);
+
 #ifdef __cplusplus
 }
 #endif
