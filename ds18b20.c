@@ -388,10 +388,21 @@ bool ds18b20_convert(const DS18B20_Info * ds18b20_info)
 
 void ds18b20_convert_all(const OneWireBus * bus)
 {
-    bool is_present = false;
-    owb_reset(bus, &is_present);
-    owb_write_byte(bus, OWB_ROM_SKIP);
-    owb_write_byte(bus, DS18B20_FUNCTION_TEMP_CONVERT);
+    if (bus)
+    {
+        bool is_present = false;
+        owb_reset(bus, &is_present);
+        owb_write_byte(bus, OWB_ROM_SKIP);
+        owb_write_byte(bus, DS18B20_FUNCTION_TEMP_CONVERT);
+
+        gpio_pad_select_gpio(5);
+        gpio_set_direction(5, GPIO_MODE_OUTPUT);
+        gpio_set_level(5, 1);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "bus is NULL");
+    }
 }
 
 float ds18b20_wait_for_conversion(const DS18B20_Info * ds18b20_info)
@@ -494,4 +505,39 @@ DS18B20_ERROR ds18b20_convert_and_read_temp(const DS18B20_Info * ds18b20_info, f
     return err;
 }
 
-
+DS18B20_ERROR ds18b20_check_for_parasite_power(const OneWireBus * bus, bool * present)
+{
+    DS18B20_ERROR err = DS18B20_ERROR_UNKNOWN;
+    ESP_LOGD(TAG, "ds18b20_check_for_parasite_power");
+    if (bus) {
+        bool reset_present;
+        if ((err = owb_reset(bus, &reset_present)) == DS18B20_OK)
+        {
+            ESP_LOGD(TAG, "owb_reset OK");
+            if ((err = owb_write_byte(bus, OWB_ROM_SKIP)) == DS18B20_OK)
+            {
+                ESP_LOGD(TAG, "owb_write_byte(ROM_SKIP) OK");
+                if ((err = owb_write_byte(bus, DS18B20_FUNCTION_POWER_SUPPLY_READ)) == DS18B20_OK)
+                {
+                    // PArasitic-powered devices will pull the bus low during read time slot
+                    ESP_LOGD(TAG, "owb_write_byte(POWER_SUPPLY_READ) OK");
+                    uint8_t value = 0;
+                    if ((err = owb_read_bit(bus, &value)) == DS18B20_OK)
+                    {
+                        ESP_LOGD(TAG, "owb_read_bit OK: 0x%02x", value);
+                        if (present)
+                        {
+                            *present = !(bool)(value & 0x01u);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        ESP_LOGE(TAG, "bus is NULL");
+        err = DS18B20_ERROR_NULL;
+    }
+    return err;
+}
