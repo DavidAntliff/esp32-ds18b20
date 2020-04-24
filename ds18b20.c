@@ -51,12 +51,12 @@ static const char * TAG = "ds18b20";
 static const int T_CONV = 750;   // maximum conversion time at 12-bit resolution in milliseconds
 
 // Function commands
-#define DS18B20_FUNCTION_TEMP_CONVERT       0x44
-#define DS18B20_FUNCTION_SCRATCHPAD_WRITE   0x4E
-#define DS18B20_FUNCTION_SCRATCHPAD_READ    0xBE
-#define DS18B20_FUNCTION_SCRATCHPAD_COPY    0x48
-#define DS18B20_FUNCTION_EEPROM_RECALL      0xB8
-#define DS18B20_FUNCTION_POWER_SUPPLY_READ  0xB4
+#define DS18B20_FUNCTION_TEMP_CONVERT       0x44  ///< Initiate a single temperature conversion
+#define DS18B20_FUNCTION_SCRATCHPAD_WRITE   0x4E  ///< Write 3 bytes of data to the device scratchpad at positions 2, 3 and 4
+#define DS18B20_FUNCTION_SCRATCHPAD_READ    0xBE  ///< Read 9 bytes of data (including CRC) from the device scratchpad
+#define DS18B20_FUNCTION_SCRATCHPAD_COPY    0x48  ///< Copy the contents of the scratchpad to the device EEPROM
+#define DS18B20_FUNCTION_EEPROM_RECALL      0xB8  ///< Restore alarm trigger values and configuration data from EEPROM to the scratchpad
+#define DS18B20_FUNCTION_POWER_SUPPLY_READ  0xB4  ///< Determine if a device is using parasitic power
 
 /// @cond ignore
 typedef struct
