@@ -579,7 +579,7 @@ DS18B20_ERROR ds18b20_check_for_parasite_power(const OneWireBus * bus, bool * pr
                 ESP_LOGD(TAG, "owb_write_byte(ROM_SKIP) OK");
                 if ((err = owb_write_byte(bus, DS18B20_FUNCTION_POWER_SUPPLY_READ)) == DS18B20_OK)
                 {
-                    // PArasitic-powered devices will pull the bus low during read time slot
+                    // Parasitic-powered devices will pull the bus low during read time slot
                     ESP_LOGD(TAG, "owb_write_byte(POWER_SUPPLY_READ) OK");
                     uint8_t value = 0;
                     if ((err = owb_read_bit(bus, &value)) == DS18B20_OK)
