@@ -1,0 +1,26 @@
+{
+  "name": "esp32-ds18b20",
+  "keywords": "onewire, 1-wire, bus, sensor, temperature",
+  "description": "ESP32-compatible C component for the Maxim Integrated DS18B20 Programmable Resolution 1-Wire Digital Thermometer.",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/DavidAntliff/esp32-ds18b20.git"
+  },
+  "authors":
+  [
+    {
+      "name": "David Antliff",
+      "url": "https://github.com/DavidAntliff",
+      "maintainer": true
+    }
+  ],
+  "version": "0.1",
+  "frameworks": "espidf",
+  "platforms": "espressif32",
+  "build": {
+    "flags": [
+        "-I include/"
+    ]
+  }
+}
