@@ -282,6 +282,10 @@ static DS18B20_ERROR _read_scratchpad(const DS18B20_Info * ds18b20_info, Scratch
             err = DS18B20_ERROR_OWB;
         }
     }
+    else
+    {
+        err = DS18B20_ERROR_DEVICE;
+    }
     return err;
 }
 
