@@ -534,6 +534,13 @@ DS18B20_ERROR ds18b20_read_temp(const DS18B20_Info * ds18b20_info, float * value
             temp_MSB = scratchpad.temperature[1];
         }
 
+        // https://github.com/cpetrich/counterfeit_DS18B20#solution-to-the-85-c-problem
+        if (scratchpad.reserved[1] == 0x0c && temp_MSB == 0x05 && temp_LSB == 0x50)
+        {
+            ESP_LOGE(TAG, "Read power-on value (85.0)");
+            err = DS18B20_ERROR_DEVICE;
+        }
+
         float temp = _decode_temp(temp_LSB, temp_MSB, ds18b20_info->resolution);
         ESP_LOGD(TAG, "temp_LSB 0x%02x, temp_MSB 0x%02x, temp %f", temp_LSB, temp_MSB, temp);
 
