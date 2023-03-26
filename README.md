@@ -7,8 +7,7 @@ Thermometer device.
 
 It supports multiple devices on the same 1-Wire bus.
 
-It is written and tested for v2.1, v3.0-3.3 and v4.1-beta1 of the [ESP-IDF](https://github.com/espressif/esp-idf) 
-environment, using the xtensa-esp32-elf toolchain (gcc version 5.2.0).
+It is tested with v4.4.4 and v5.0.1 of the [ESP-IDF](https://github.com/espressif/esp-idf) environment.
 
 ## Dependencies
 
