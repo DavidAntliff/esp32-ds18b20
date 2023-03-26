@@ -41,6 +41,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
+#include "esp_timer.h"      // for esp_timer_get_time()
 #include "esp_system.h"
 #include "esp_log.h"
 
